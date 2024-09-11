@@ -1,0 +1,48 @@
+name: Packer Docker Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: "Docker image version tag"
+        required: true
+        default: "latest"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Setup Packer
+      uses: hashicorp/setup-packer@v3
+      with:
+        packer_version: 'latest'
+
+    - name: Initialize Packer
+      run: packer init .
+
+    - name: Validate Packer Configuration
+      run: packer validate packer.pkr.hcl
+
+    - name: Build Docker Image with Packer
+      run: packer build packer.pkr.hcl
+
+    - name: Log in to GitLab Container Registry
+      run: |
+        echo "${{ secrets.GITLAB_PASSWORD }}" | docker login -u "${{ secrets.GITLAB_USERNAME }}" --password-stdin registry.gitlab.com
+
+    - name: Tag and Push Docker Image to GitLab
+      run: |
+        version="${{ github.event.inputs.version_tag }}"
+        docker tag registry.gitlab.com/s3cloudhub2/docker-example:latest registry.gitlab.com/s3cloudhub2/docker-example:${version}
+        docker push registry.gitlab.com/s3cloudhub2/docker-example:latest
+        docker push registry.gitlab.com/s3cloudhub2/docker-example:${version}
+
+    - name: Logout from GitLab
+      run: docker logout registry.gitlab.com
